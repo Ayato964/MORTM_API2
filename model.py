@@ -41,3 +41,23 @@ def get_model_folder_paths(base_dir="data/models"):
     abs_base_dir = os.path.abspath(base_dir)
     return [os.path.join(abs_base_dir, name) for name in os.listdir(abs_base_dir)
             if os.path.isdir(os.path.join(abs_base_dir, name))]
+
+
+class AbstractModelRapper(ABC):
+    def __init__(self, data_path, config_path):
+        with open(data_path, 'r') as f:
+            self.meta = json.load(f)
+        self.config = config_path
+
+    @abstractmethod
+    def preprocessing(self, midi_path):
+        pass
+
+    @abstractmethod
+    def postprocessing(self, sequence, save_directory):
+        pass
+
+    @abstractmethod
+    def generate(self, sequence, save_directory):
+        pass
+

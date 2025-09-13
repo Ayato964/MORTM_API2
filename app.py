@@ -1,3 +1,6 @@
+import base64
+from datetime import datetime
+
 from fastapi import Form
 from pathlib import Path
 import io, os, uuid, mido
@@ -9,7 +12,7 @@ from model import *
 
 app = FastAPI()
 CONTROLLER: Optional[ModelController] = None
-SAVE_DIR = Path("data/saves")
+ROOT_SAVE_DIR = Path("data/saves")
 
 
 @app.post("/model_info")
@@ -32,18 +35,24 @@ async def pre_train_generate(
         raw = await midi.read()
         midi_obj = mido.MidiFile(file=io.BytesIO(raw))
 
-        SAVE_DIR.mkdir(parents=True, exist_ok=True)
+        ROOT_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
         # 元のファイル名があれば使う。なければUUIDに退避
         orig = (midi.filename or "input.mid").replace("\\", "_").replace("/", "_")
         if not orig.lower().endswith(".mid"):
             orig += ".mid"
-        save_path = SAVE_DIR / orig
+        today = datetime.now().strftime("%Y%m%d") # 日付フォルダ
 
-        midi_obj.save(save_path.as_posix())
+        hash_id = base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b"=").decode("ascii")[:12] # URLセーフなランダムID
+
+        save_path = Path(os.path.join(ROOT_SAVE_DIR, today, hash_id))
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        midi_obj.save(os.path.join(save_path, "input.mid"))
         # TODO: 生成処理
         return {"saved": str(save_path), "model_type": model_type, "temperature": temperature, "p": p} # 仮のレスポンス
-    except Exception:
+    except Exception as e:
+        print(e)
         return JSONResponse({"error": "有効なMIDIファイルのみ受け付けます"}, status_code=400)
 
 if __name__ == "__main__":
