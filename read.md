@@ -80,11 +80,11 @@ data/
 -   **Method**: `POST`
 -   **Request Body**: `multipart/form-data`
     -   `midi`: (`file`) 生成のベースとなるMIDIファイル。
-    -   `meta_json`: (`string`) 生成パラメータを記述したJSON文字列。
+    -   `meta_json`: (`file`) 生成パラメータを記述したJSONファイル。
 
-#### `meta_json` の構造
+#### `meta_json` ファイルの構造
 
-`GenerateMeta`モデルに基づきます。
+`GenerateMeta`モデルに基づきます。ファイルの中身は以下のキーを持つJSONオブジェクトである必要があります。
 
 | フィールド        | 型             | 説明                                           | デフォルト値 |
 | ----------------- | -------------- | ---------------------------------------------- | ------------ |
@@ -100,12 +100,21 @@ data/
 
 #### cURLリクエスト例
 
-以下のコマンドは、生成されたファイルを `generated.mid` という名前で保存します。
+`meta.json` というファイルに上記のパラメータを記述し、以下のコマンドを実行します。生成されたファイルは `generated.mid` という名前で保存されます。
 
 ```bash
+# meta.json の例
+# {
+#   "model_type": "MORTM4.1-SAX",
+#   "program": [56],
+#   "tempo": 120,
+#   "task": "generate",
+#   "p": 0.96
+# }
+
 curl -X POST "http://localhost:8000/generate" \
      -F "midi=@/path/to/your/input.mid" \
-     -F "meta_json={\"model_type\": \"MORTM4.1-SAX\", \"program\": [56], \"tempo\": 120, \"task\": \"generate\", \"p\": 0.96}" \
+     -F "meta_json=@/path/to/your/meta.json" \
      -o generated.mid
 ```
 

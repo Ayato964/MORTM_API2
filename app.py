@@ -26,17 +26,21 @@ async def model_info():
 @app.post("/generate")
 async def generate(
     midi: UploadFile = File(...),
-    meta_json: str = Form(...),
+    meta_json: UploadFile = File(...),
 
 ):
-    allowed_types = {"audio/midi", "audio/x-midi", "application/x-midi", "application/octet-stream"}
-    if midi.content_type not in allowed_types:
+    allowed_midi_types = {"audio/midi", "audio/x-midi", "application/x-midi", "application/octet-stream"}
+    if midi.content_type not in allowed_midi_types:
         return JSONResponse({"error": "MIDIファイルをアップロードしてください"}, status_code=400)
 
+    if meta_json.content_type not in {"application/json"}:
+        return JSONResponse({"error": "meta_jsonはJSONファイルをアップロードしてください"}, status_code=400)
+
     try:
-        # 1. PydanticモデルでJSON文字列をパース & バリデーション
+        # 1. PydanticモデルでJSONファイルをパース & バリデーション
         try:
-            meta = GenerateMeta.model_validate(json.loads(meta_json))
+            json_content = await meta_json.read()
+            meta = GenerateMeta.model_validate(json.loads(json_content))
         except (ValidationError, json.JSONDecodeError) as e:
             # バリデーションエラーの場合、FastAPIは通常422を返します
             return JSONResponse(
