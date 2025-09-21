@@ -74,7 +74,7 @@ data/
 
 ### 音楽の生成
 
-指定したモデルとパラメータで新しいMIDIファイルを生成します。
+指定したモデルとパラメータで新しいファイルを生成します。
 
 -   **URL**: `/generate`
 -   **Method**: `POST`
@@ -100,22 +100,23 @@ data/
 
 #### cURLリクエスト例
 
+以下のコマンドは、生成されたファイルを `generated.mid` という名前で保存します。
+
 ```bash
 curl -X POST "http://localhost:8000/generate" \
      -F "midi=@/path/to/your/input.mid" \
-     -F "meta_json={\"model_type\": \"MORTM4.1-SAX\", \"program\": [56], \"tempo\": 120, \"task\": \"generate\", \"p\": 0.96}"
+     -F "meta_json={\"model_type\": \"MORTM4.1-SAX\", \"program\": [56], \"tempo\": 120, \"task\": \"generate\", \"p\": 0.96}" \
+     -o generated.mid
 ```
 
 #### 成功レスポンス
 
-```json
-{
-    "result": "success",
-    "model_type": "MORTM4.1-SAX",
-    "save_path": "data/saves/20231027/your_hash_id",
-    "output_file": "data/saves/20231027/your_hash_id/generated.mid"
-}
-```
+-   **Status Code**: `200 OK`
+-   **Content-Type**: レスポンスヘッダーには、生成されたファイルの形式に応じた`Content-Type`が設定されます。
+    -   `.mid` ファイルの場合: `audio/midi`
+    -   `.txt` ファイルの場合: `text/plain`
+    -   その他の場合: `application/octet-stream`
+-   **Response Body**: 生成されたファイル（MIDIやテキストなど）そのものが返されます。
 
 ## ✨ 新しいモデルの追加方法
 

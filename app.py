@@ -7,7 +7,7 @@ from pathlib import Path
 import io, os, uuid, mido
 
 from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import ValidationError
 from mortm.utils.generate import *
 from model import *
@@ -36,8 +36,7 @@ async def generate(
     try:
         # 1. PydanticモデルでJSON文字列をパース & バリデーション
         try:
-            #meta = GenerateMeta.parse_raw(meta_json)
-            meta = GenerateMeta.model_validate(meta_json)
+            meta = GenerateMeta.model_validate(json.loads(meta_json))
         except (ValidationError, json.JSONDecodeError) as e:
             # バリデーションエラーの場合、FastAPIは通常422を返します
             return JSONResponse(
@@ -62,9 +61,33 @@ async def generate(
         if CONTROLLER is None:
             return JSONResponse({"error": "モデルが初期化されていません"}, status_code=500)
 
-        # 3. Controllerのgenerateを呼び出す (パースしたデータを使用)
+        # 3. Controllerのgenerateを呼び出し、結果のファイルパスを取得
         result = await CONTROLLER.generate(meta.model_type, str(midi_file_path), meta, save_path)
-        return JSONResponse(result)
+        
+        output_file_path = result.get("output_file")
+
+        # 4. ファイルパスの存在を確認
+        if not output_file_path or not os.path.exists(output_file_path):
+            return JSONResponse(
+                content={"error": "生成されたファイルが見つかりません。"},
+                status_code=500,
+            )
+
+        # 5. 拡張子に応じてmedia_typeを決定し、FileResponseとして返す
+        file_extension = os.path.splitext(output_file_path)[1].lower()
+        if file_extension == ".mid":
+            media_type = "audio/midi"
+        elif file_extension == ".txt":
+            media_type = "text/plain"
+        else:
+            media_type = "application/octet-stream"
+
+        return FileResponse(
+            path=output_file_path,
+            media_type=media_type,
+            filename=os.path.basename(output_file_path)
+        )
+
     except Exception as e:
         print(e)
         return JSONResponse({"error": str(e)}, status_code=500)
