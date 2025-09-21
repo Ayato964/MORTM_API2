@@ -1,0 +1,7 @@
+{
+  "model_type": "MORTM4.1Pro-SAX",
+  "p": 0.95,
+  "temperature": 1.0,
+  "num_generate": 3,
+  "program": [65]
+}

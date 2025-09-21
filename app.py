@@ -1,4 +1,5 @@
 import base64
+import json
 from datetime import datetime
 
 from fastapi import Form
@@ -7,6 +8,7 @@ import io, os, uuid, mido
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from mortm.utils.generate import *
 from model import *
 
@@ -15,45 +17,57 @@ CONTROLLER: Optional[ModelController] = None
 ROOT_SAVE_DIR = Path("data/saves")
 
 
+
 @app.post("/model_info")
 async def model_info():
     return JSONResponse(CONTROLLER.meta)
 
 
-@app.post("/pre_train_generate")
-async def pre_train_generate(
-        midi: UploadFile = File(...),
-        model_type: str = Form(...),
-        temperature: float = Form(1.0),
-        p: float = Form(0.95),
+@app.post("/generate")
+async def generate(
+    midi: UploadFile = File(...),
+    meta_json: str = Form(...),
+
 ):
     allowed_types = {"audio/midi", "audio/x-midi", "application/x-midi", "application/octet-stream"}
     if midi.content_type not in allowed_types:
         return JSONResponse({"error": "MIDIファイルをアップロードしてください"}, status_code=400)
 
     try:
+        # 1. PydanticモデルでJSON文字列をパース & バリデーション
+        try:
+            #meta = GenerateMeta.parse_raw(meta_json)
+            meta = GenerateMeta.model_validate(meta_json)
+        except (ValidationError, json.JSONDecodeError) as e:
+            # バリデーションエラーの場合、FastAPIは通常422を返します
+            return JSONResponse(
+                content={"error": "無効な'meta_json'形式です。", "details": json.loads(e.json()) if isinstance(e, ValidationError) else str(e)},
+                status_code=422,
+            )
+
+        # 2. MIDIファイルの読み込みと保存 (pathlibに統一)
         raw = await midi.read()
         midi_obj = mido.MidiFile(file=io.BytesIO(raw))
 
         ROOT_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
-        # 元のファイル名があれば使う。なければUUIDに退避
-        orig = (midi.filename or "input.mid").replace("\\", "_").replace("/", "_")
-        if not orig.lower().endswith(".mid"):
-            orig += ".mid"
-        today = datetime.now().strftime("%Y%m%d") # 日付フォルダ
-
-        hash_id = base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b"=").decode("ascii")[:12] # URLセーフなランダムID
-
-        save_path = Path(os.path.join(ROOT_SAVE_DIR, today, hash_id))
+        today = datetime.now().strftime("%Y%m%d")
+        hash_id = base64.urlsafe_b64encode(uuid.uuid4().bytes).rstrip(b"=").decode("ascii")[:12]
+        save_path = ROOT_SAVE_DIR / today / hash_id
         save_path.mkdir(parents=True, exist_ok=True)
 
-        midi_obj.save(os.path.join(save_path, "input.mid"))
-        # TODO: 生成処理
-        return {"saved": str(save_path), "model_type": model_type, "temperature": temperature, "p": p} # 仮のレスポンス
+        midi_file_path = save_path / "input.mid"
+        midi_obj.save(midi_file_path)
+
+        if CONTROLLER is None:
+            return JSONResponse({"error": "モデルが初期化されていません"}, status_code=500)
+
+        # 3. Controllerのgenerateを呼び出す (パースしたデータを使用)
+        result = await CONTROLLER.generate(meta.model_type, str(midi_file_path), meta, save_path)
+        return JSONResponse(result)
     except Exception as e:
         print(e)
-        return JSONResponse({"error": "有効なMIDIファイルのみ受け付けます"}, status_code=400)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 if __name__ == "__main__":
     print("モデルの初期化を行っています・・・・")

@@ -1,63 +1,74 @@
 import json
 import os
-import torch
+from typing import Optional, List
 
-from pretty_midi import PrettyMIDI
+from rapper import *
+from models.mortm.mortm4 import MORTM4Rapper
 
-from mortm.models.mortm import MORTM, MORTMArgs
-from mortm.models.modules.progress import _DefaultLearningProgress
-from mortm.utils.generate import *
-
-
+# --- Controller ---
 class ModelController:
     def __init__(self):
-        model_folders = get_model_folder_paths()
-        self.models = {}
-        self.meta = {}
-        for i, model in enumerate(model_folders):
-            j = json.load(open(os.path.join(model, "data.json"), "r", encoding="utf-8"))
-            print(f"Loading model: {j['model_name']} from {model}")
-            self.models[j['model_name']] = j.copy()
-            self.meta[i] = j.copy()
-            args = MORTMArgs(os.path.join(model, "config.json"))
-            progress = _DefaultLearningProgress()
-            m = MORTM(args, progress).to(progress.get_device())
-            m.load_state_dict(torch.load(os.path.join(model, "model.pth")))
-            self.models[j['model_name']]['instance'] = m
+        self.rapper_factory = ModelRapperFactory()
+        self._register_rappers()
 
+        self.available_models = {}
+        self._scan_model_folders()
+
+        self.meta = {i: info for i, info in enumerate(self.available_models.values())}
+        print("Initialized. Available models:")
         print(self.meta)
 
-    async def generate(self, model_name, midi_path, save_directory):
-        if model_name not in self.models:
-            raise ValueError(f"Model '{model_name}' not found.")
-        model = self.models[model_name]
-        return model.d_model
+    def _register_rappers(self):
+        """
+        ここに新しいRapperクラスを登録します。
+        これにより、新しいモデルアーキテクチャに簡単対応できます。
+        """
+        self.rapper_factory.register_rapper("MORTM4.1-SAX", MORTM4Rapper)
+        self.rapper_factory.register_rapper("MORTM4.1Pro-SAX", MORTM4Rapper)
 
+        # 例: self.rapper_factory.register_rapper("NewModel", NewModelRapper)
 
-def get_model_folder_paths(base_dir="data/models"):
-    """
-    data/models配下の全フォルダパスをリストで返す
-    """
-    abs_base_dir = os.path.abspath(base_dir)
-    return [os.path.join(abs_base_dir, name) for name in os.listdir(abs_base_dir)
-            if os.path.isdir(os.path.join(abs_base_dir, name))]
+    def _scan_model_folders(self, base_dir="data/models"):
+        """
+        モデルフォルダをスキャンし、モデルのメタデータを読み込みます。
+        この時点ではモデルのインスタンス化は行いません。
+        """
+        if not os.path.isdir(base_dir):
+            return
+        abs_base_dir = os.path.abspath(base_dir)
+        for name in os.listdir(abs_base_dir):
+            model_path = os.path.join(abs_base_dir, name)
+            if not os.path.isdir(model_path):
+                continue
 
+            data_json_path = os.path.join(model_path, "data.json")
+            if os.path.exists(data_json_path):
+                try:
+                    with open(data_json_path, "r", encoding="utf-8") as f:
+                        model_info = json.load(f)
+                    model_name = model_info.get('model_name')
+                    if model_name:
+                        model_info['model_folder_path'] = model_path
+                        self.available_models[model_name] = model_info
+                        print(f"Found model: {model_name}")
+                except Exception as e:
+                    print(f"Error loading model info from {model_path}: {e}")
 
-class AbstractModelRapper(ABC):
-    def __init__(self, data_path, config_path):
-        with open(data_path, 'r') as f:
-            self.meta = json.load(f)
-        self.config = config_path
+    async def generate(self, model_type, midi_path: str, meta: GenerateMeta, save_directory):
+        if model_type not in self.available_models:
+            raise ValueError(f"指定されたモデル({model_type})は存在しません")
 
-    @abstractmethod
-    def preprocessing(self, midi_path):
-        pass
+        # generateが呼ばれたタイミングで、初めてRapperとモデルをインスタンス化する
+        model_info = self.available_models[model_type]
+        rapper = self.rapper_factory.create_rapper(model_info)
 
-    @abstractmethod
-    def postprocessing(self, sequence, save_directory):
-        pass
+        kwargs = rapper.preprocessing(midi_path, meta)
+        generated_data_kwargs = rapper.generate(**kwargs)
+        output_file_path = rapper.postprocessing(save_directory, **generated_data_kwargs)
 
-    @abstractmethod
-    def generate(self, sequence, save_directory):
-        pass
-
+        return {
+            "result": "success",
+            "model_type": model_type,
+            "save_path": str(save_directory),
+            "output_file": output_file_path
+        }
