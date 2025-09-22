@@ -42,10 +42,11 @@ class MORTM4Rapper(AbstractModelRapper):
         meta: GenerateMeta = kwargs['meta']
         if self.meta['tag']['model'] == 'pretrained':
             tokenizer = Tokenizer(get_token_converter(TO_TOKEN))
-            pre_train_generate(self.model, tokenizer, save_directory, midi_path,
+            pre_train_generate(self.model, tokenizer, save_directory, [midi_path],
                                program=meta.program,
                                p=meta.p, temperature=meta.temperature,
                                split_measure=meta.split_measure)
+            os.rename(os.path.join(save_directory, f"generated_{os.path.basename(midi_path)}"), output_path)
         elif self.meta['tag']['model'] == 'sft':
             tokenizer = Tokenizer(get_token_converter(TO_TOKEN))
             chord_prompt = None

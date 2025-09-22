@@ -13,7 +13,7 @@ class GenerateMeta(BaseModel):
     temperature: Optional[float] = 1.0
     chord_item: Optional[List[str]] = None
     chord_times: Optional[List[float]] = None
-    split_measure: Optional[int] = 999,
+    split_measure: Optional[int] = 999
 
 
 # --- Strategy & Factory Pattern ---

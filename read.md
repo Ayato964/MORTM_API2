@@ -112,10 +112,7 @@ data/
 #   "p": 0.96
 # }
 
-curl -X POST "http://localhost:8000/generate" \
-     -F "midi=@/path/to/your/input.mid" \
-     -F "meta_json=@/path/to/your/meta.json" \
-     -o generated.mid
+curl.exe -X POST "http://localhost:8000/generate"  -F "midi=@./Sample4.mid"  -F "meta_json=@./meta.json;type=application/json" -o generated.mid
 ```
 
 #### 成功レスポンス
